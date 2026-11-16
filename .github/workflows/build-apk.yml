@@ -3,7 +3,8 @@ name: Build Odds Analyzer APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -23,10 +24,9 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-  uses: android-actions/setup-android@v4
-  with:
-    packages: 'platform-tools'
-    
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
       - name: Install SDK
         run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
@@ -44,13 +44,12 @@ jobs:
       - name: Build APK
         run: |
           gradle --no-daemon --stacktrace \
-          -p extracted/odds_analyzer_android_v4 assembleDebug
+            -p extracted/odds_analyzer_android_v4 assembleDebug
 
-      - name: Upload APK and log
+      - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Odds-Analyzer-Results
-          path: |
-            extracted/odds_analyzer_android_v4/app/build/outputs/apk/debug/app-debug.apk
+          name: Odds-Analyzer-APK
+          path: extracted/odds_analyzer_android_v4/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: warn
