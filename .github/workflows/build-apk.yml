@@ -39,7 +39,6 @@ jobs:
       - name: Extract project
         run: |
           unzip -o OddsAnalyzer.zip -d extracted
-          ls -la extracted/odds_analyzer_android_v4
 
       - name: Fix Java and Kotlin targets
         run: |
@@ -78,9 +77,28 @@ jobs:
           }
           EOF
           else
-            echo "App Gradle file not found"
+            echo "Gradle file not found"
             exit 1
           fi
 
       - name: Build APK
-        run: gradle --no-daemon
+        run: |
+          gradle --no-daemon --stacktrace \
+            -p extracted/odds_analyzer_android_v4 assembleDebug
+
+      - name: Find APK
+        run: |
+          APK=$(find extracted -type f -name "app-debug.apk" | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "APK file not found"
+            exit 1
+          fi
+          cp "$APK" OddsAnalyzer.apk
+          ls -lh OddsAnalyzer.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Odds-Analyzer-APK
+          path: OddsAnalyzer.apk
+          if-no-files-found: error
