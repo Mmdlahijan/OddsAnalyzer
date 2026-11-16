@@ -3,30 +3,50 @@ name: Build Odds Analyzer APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Create project
+      - name: Create Android project
         run: |
-          mkdir -p app/src/main/java/com/oddslab/analyzer
+          mkdir -p app/src/main/java/com/oddsanalyzer
 
           cat > settings.gradle.kts <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
           rootProject.name = "OddsAnalyzer"
           include(":app")
           EOF
@@ -38,36 +58,50 @@ jobs:
           }
           EOF
 
-          echo "android.useAndroidX=true" > gradle.properties
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          org.gradle.jvmargs=-Xmx2048m
+          EOF
 
           cat > app/build.gradle.kts <<'EOF'
           plugins {
               id("com.android.application")
               id("org.jetbrains.kotlin.android")
           }
+
           android {
-              namespace = "com.oddslab.analyzer"
+              namespace = "com.oddsanalyzer"
               compileSdk = 35
+
               defaultConfig {
-                  applicationId = "com.oddslab.analyzer"
+                  applicationId = "com.oddsanalyzer"
                   minSdk = 23
                   targetSdk = 35
-                  versionCode = 2
-                  versionName = "1.1"
+                  versionCode = 1
+                  versionName = "1.0"
               }
+
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
-              kotlinOptions { jvmTarget = "17" }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
           }
           EOF
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
-              <application android:theme="@android:style/Theme.Material.NoActionBar" android:label="Odds Analyzer">
-                  <activity android:name=".MainActivity" android:exported="true">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="Odds Analyzer"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -77,95 +111,51 @@ jobs:
           </manifest>
           EOF
 
-          cat > app/src/main/java/com/oddslab/analyzer/MainActivity.kt <<'EOF'
-          package com.oddslab.analyzer
+          cat > app/src/main/java/com/oddsanalyzer/MainActivity.kt <<'EOF'
+          package com.oddsanalyzer
 
           import android.app.Activity
           import android.os.Bundle
-          import android.graphics.Color
-          import android.webkit.*
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
           import android.widget.*
-          import android.view.Gravity
+          import android.view.ViewGroup
 
           class MainActivity : Activity() {
-              lateinit var input: EditText
-              lateinit var status: TextView
-              lateinit var output: TextView
-              lateinit var browser: WebView
+              private lateinit var urlInput: EditText
+              private lateinit var result: TextView
+              private lateinit var browser: WebView
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  val layout = LinearLayout(this).apply {
-                      orientation = 1
-                      setPadding(18,20,18,12)
-                      setBackgroundColor(Color.rgb(15,22,35))
-                  }
-                  fun label(s:String): TextView {
-                      return TextView(this).apply {
-                          text=s
-                          textSize=16f
-                          setTextColor(Color.WHITE)
-                          setPadding(5,12,5,12)
-                      }
-                  }
-                  layout.addView(label("ODDS ANALYZER"))
-                  layout.addView(label("تحلیل ضرایب مسابقات"))
-                  input = EditText(this).apply {
-                      hint="لینک مسابقه 1xBet"
-                      setTextColor(Color.WHITE)
-                      setHintTextColor(Color.LTGRAY)
-                      setSingleLine(true)
-                  }
-                  layout.addView(input)
-                  val open = Button(this).apply { text="باز کردن مسابقه" }
-                  layout.addView(open)
-                  val get = Button(this).apply {
-                      text="استخراج ضرایب"
-                      isEnabled=false
-                  }
-                  layout.addView(get)
-                  status=label("آماده")
-                  layout.addView(status)
-                  output=label("بازارهای استخراج‌شده")
-                  val scroll=ScrollView(this)
-                  scroll.addView(output)
-                  layout.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-                  browser=WebView(this)
-                  browser.settings.javaScriptEnabled=true
-                  browser.settings.domStorageEnabled=true
-                  browser.visibility=android.view.View.VISIBLE
-                  browser.alpha=0.01f
-                  layout.addView(browser,LinearLayout.LayoutParams(1,1))
-                  browser.webViewClient=object:WebViewClient() {
-                      override fun onPageFinished(v:WebView?,u:String?) {
-                          status.text="صفحه بارگذاری شد."
-                          get.isEnabled=true
-                      }
-                  }
-                  open.setOnClickListener {
-                      var u=input.text.toString().trim()
-                      if (!u.startsWith("https://")) u="https://$u"
-                      val host=android.net.Uri.parse(u).host ?: ""
-                      if (!host.contains("1xbet",true)) {
-                          status.text="لینک معتبر 1xBet وارد کنید."
-                      } else {
-                          status.text="در حال بارگذاری..."
-                          get.isEnabled=false
-                          browser.loadUrl(u)
-                      }
-                  }
-                  get.setOnClickListener {
-                      browser.evaluateJavascript(
-                          "(document.body ? document.body.innerText : '')"
-                      ) { raw ->
-                          val text=raw?.removeSurrounding("\"")
-                              ?.replace("\\n","\n")
-                              ?.replace("\\\"","\"") ?: ""
-                          val regex=Regex("""\d{1,3}\.\d{2,3}""")
-                          val rows=text.lines().mapNotNull { line ->
-                              val odds=regex.findAll(line).map { it.value }.toList()
-                              if (odds.isEmpty()) null
-                              else line.take(180)+"   "+odds.joinToString(" | ")
-                          }.take(100)
-                          output.text=if(rows.isEmpty())
-                              "ضریبی پیدا نشد. ممکن است سایت محدودیت داشته باشد."
+
+                  val layout = LinearLayout(this)
+                  layout.orientation = LinearLayout.VERTICAL
+                  layout.setPadding(16, 16, 16, 16)
+
+                  val title = TextView(this)
+                  title.text = "Odds Analyzer"
+                  title.textSize = 24f
+                  layout.addView(title)
+
+                  urlInput = EditText(this)
+                  urlInput.hint = "آدرس مسابقه 1xBet را وارد کنید"
+                  urlInput.setSingleLine(true)
+                  layout.addView(urlInput)
+
+                  val loadButton = Button(this)
+                  loadButton.text = "بارگذاری مسابقه"
+                  layout.addView(loadButton)
+
+                  val readButton = Button(this)
+                  readButton.text = "استخراج اطلاعات و ضرایب"
+                  layout.addView(readButton)
+
+                  result = TextView(this)
+                  result.text = "آدرس مسابقه را وارد کنید."
+                  result.textSize = 15f
+
+                  val scroll = ScrollView(this)
+                  scroll.addView(result)
+                  layout.addView(scroll, LinearLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT, 0, 1
