@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,10 +17,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -26,15 +35,19 @@ jobs:
 
       - name: Extract project
         run: |
-          unzip OddsAnalyzer.zip -d extracted
-          ls -la extracted
+          unzip -o OddsAnalyzer.zip -d extracted
+          ls -la extracted/odds_analyzer_android_v4
 
       - name: Build APK
-        working-directory: extracted/odds_analyzer_android_v4
-        run: gradle --no-daemon assembleDebug
+        run: |
+          gradle --no-daemon --stacktrace \
+          -p extracted/odds_analyzer_android_v4 assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK and log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Odds-Analyzer-APK
-          path: extracted/odds_analyzer_android_v4/app/build/outputs/apk/debug/app-debug.apk
+          name: Odds-Analyzer-Results
+          path: |
+            extracted/odds_analyzer_android_v4/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
