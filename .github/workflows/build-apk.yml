@@ -41,15 +41,46 @@ jobs:
           unzip -o OddsAnalyzer.zip -d extracted
           ls -la extracted/odds_analyzer_android_v4
 
-      - name: Build APK
+      - name: Fix Java and Kotlin targets
         run: |
-          gradle --no-daemon --stacktrace \
-            -p extracted/odds_analyzer_android_v4 assembleDebug
+          APP_DIR="extracted/odds_analyzer_android_v4/app"
 
-      - name: Upload APK
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Odds-Analyzer-APK
-          path: extracted/odds_analyzer_android_v4/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: warn
+          if [ -f "$APP_DIR/build.gradle" ]; then
+            cat >> "$APP_DIR/build.gradle" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
+          elif [ -f "$APP_DIR/build.gradle.kts" ]; then
+            cat >> "$APP_DIR/build.gradle.kts" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
+          else
+            echo "App Gradle file not found"
+            exit 1
+          fi
+
+      - name: Build APK
+        run: gradle --no-daemon
